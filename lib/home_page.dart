@@ -48,6 +48,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     storage = GetStorage('PREFS');
   }
 
+  Future<List<SmsMessage>> getInbox() async {
+    List<SmsMessage> messages = await telephony.getInboxSms(
+        columns: [SmsColumn.ADDRESS, SmsColumn.BODY],
+        filter: SmsFilter.where(SmsColumn.ADDRESS)
+            .equals("+639950419802")
+            .and(SmsColumn.BODY)
+            .like("starwars"),
+        sortOrder: [
+          OrderBy(SmsColumn.ADDRESS, sort: Sort.ASC),
+          OrderBy(SmsColumn.BODY)
+        ]);
+
+    return messages;
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
