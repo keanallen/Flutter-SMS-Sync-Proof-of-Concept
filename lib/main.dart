@@ -1,69 +1,63 @@
+import 'package:realtime_poc/data/database.dart';
 import 'package:crypto_simple/crypto_simple.dart';
 import 'package:realtime_poc/intro_page.dart';
-import 'package:get_storage/get_storage.dart';
+import 'package:realtime_poc/recipients_page.dart';
 import 'package:telephony/telephony.dart';
 
+CryptoSimple? crypt;
+
 backgrounMessageHandler(SmsMessage message) async {
-  await GetStorage.init('PREFS');
-  GetStorage storage = GetStorage('PREFS');
-  CryptoSimple? crypt;
-
-  crypt ??= CryptoSimple(
-    superKey: 2023,
-    subKey: 47,
-    secretKey: "MySecretKey! ;)",
-    encryptionMode: EncryptionMode.Randomized,
-  );
-
-  //Handle background message
-  print("==== MESSAGE RECEIVED IN BACKGROUND ====");
+  if (kDebugMode) {
+    print("==== MESSAGE RECEIVED IN BACKGROUND ====");
+  }
 
   try {
-    List items = storage.read('items') ?? [];
+    crypt ??= CryptoSimple(
+      superKey: 2023,
+      subKey: 47,
+      secretKey: "MySecretKey! ;)",
+      encryptionMode: EncryptionMode.Randomized,
+    );
+
+    var db = DatabaseHelper.instance;
 
     var decrypted = CryptoSimple.decrypt(encrypted: message.body!);
 
-    var body = jsonDecode(decrypted);
+    // POC-SMS-APP=   it's just an identifier
+    if (decrypted.contains("POC-SMS-APP=")) {
+      decrypted = decrypted.replaceFirst("POC-SMS-APP=", "");
 
-    int productId = body['pid'];
-    int newQty = int.parse(body['value'].toString());
-    String action = body['type'];
-    String name = body['name'];
+      var body = jsonDecode(decrypted);
 
-    print("=== BG PREFS ITEMS ===");
-    print(items);
-    List<String>? newVal = [];
+      int productId = body['pid'];
+      int newQty = int.parse(body['value'].toString());
+      String action = body['type'];
+      String name = body['name'];
+      String date = body['date'];
 
-    if (items != null) {
-      newVal = [...items, message.body!];
-    } else {
-      newVal = [message.body!];
+      SMSData smsData = SMSData.fromMap({
+        "type": action,
+        "value": newQty,
+        "pid": productId,
+        "name": name,
+        "date": date,
+      });
+
+      await db.insertData(smsData);
+      if (kDebugMode) {
+        print("== INSERTED ==");
+      }
     }
-
-    await storage.write('items', newVal);
-
-    print("=== BG PREFS - NEWVAL ===");
-    print(newVal);
-    print("=== GS - NEWVAL ===");
-    print(storage.read('items'));
-
-    // var type = action == "increment"
-    //     ? ProductAction.INCREMENT
-    //     : action == "decrement"
-    //         ? ProductAction.DECREMENT
-    //         : ProductAction.NEW;
-
-    // Product product = Product(productId, newQty, name);
-
-    // streamController.add(ProductEvent([], type, product));
   } catch (e) {
-    print("=== errror in BG ===");
-    print(e);
+    if (kDebugMode) {
+      print("=== errror in BG ===");
+      print(e);
+    }
   }
 }
 
 void main() async {
-  CryptoSimple(
+  crypt ??= CryptoSimple(
     superKey: 2023,
     subKey: 47,
     secretKey: "MySecretKey! ;)",
@@ -72,24 +66,40 @@ void main() async {
 
   WidgetsFlutterBinding.ensureInitialized();
 
-  await GetStorage.init('PREFS');
-  GetStorage('PREFS').write('items', []);
+  // create database
+  await DatabaseHelper.instance.db;
 
-  runApp(const MyApp());
+  runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  MyApp({super.key});
 
+  //const IntroPage()
+  final db = DatabaseHelper.instance;
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       title: 'Flutter Demo',
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: IntroPage(),
+      home: FutureBuilder(
+        future: db.getAllUser(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+
+          return snapshot.data != null && snapshot.data!.isNotEmpty
+              ? const RecipientsPage()
+              : const IntroPage();
+        },
+      ),
     );
   }
 }

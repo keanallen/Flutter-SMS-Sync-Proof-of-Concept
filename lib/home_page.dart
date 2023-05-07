@@ -2,20 +2,21 @@ import 'dart:async';
 
 import 'package:crypto_simple/crypto_simple.dart';
 
-import 'package:realtime_poc/product.dart';
+import 'package:realtime_poc/data/product.dart';
 import 'package:realtime_poc/stream.dart';
-import 'package:realtime_poc/user.dart';
-import 'package:get_storage/get_storage.dart';
 import 'package:telephony/telephony.dart';
 
+import 'data/database.dart';
+import 'data/user_model.dart';
 import 'main.dart';
 
 final streamController = ProductService().controller;
 
 class HomePage extends StatefulWidget {
   final User user;
+  final List<User> users;
 
-  const HomePage({super.key, required this.user});
+  const HomePage({super.key, required this.user, required this.users});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -25,70 +26,29 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final Telephony telephony = Telephony.instance;
 // Obtain shared preferences.
 
-  late GetStorage storage;
-
   late StreamSubscription<Product> subscription;
   List<Product> products = [];
-  final List<User> users = [
-    User(1, "Dummy", "+639952215588"),
-    User(3, "Kean Allen", "+639952215588"),
-  ];
-
-  // void subscribeToProductStream() {
-  //   subscription = streamController.stream.listen((event) async {
-  //     print("== STREAM ==");
-
-  //     print(event.product.id);
-  //     print(event.product.qty);
-  //     print(event.action);
-  //   });
-  // }
-  Future<void> _initStorage() async {
-    await GetStorage.init('PREFS');
-    storage = GetStorage('PREFS');
-  }
-
-  Future<List<SmsMessage>> getInbox() async {
-    List<SmsMessage> messages = await telephony.getInboxSms(
-        columns: [SmsColumn.ADDRESS, SmsColumn.BODY],
-        filter: SmsFilter.where(SmsColumn.ADDRESS)
-            .equals("+639950419802")
-            .and(SmsColumn.BODY)
-            .like("starwars"),
-        sortOrder: [
-          OrderBy(SmsColumn.ADDRESS, sort: Sort.ASC),
-          OrderBy(SmsColumn.BODY)
-        ]);
-
-    return messages;
-  }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
+  void didChangeAppLifecycleState(AppLifecycleState state) async {
     super.didChangeAppLifecycleState(state);
-    // SharedPreferences.getInstance().then((value) => prefs = value);
-    _initStorage();
 
     if (state == AppLifecycleState.resumed) {
-      print("=== RESUMED ===");
+      if (kDebugMode) {
+        print("=== RESUMED ===");
+      }
 
-      List items = storage.read('items');
+      var db = DatabaseHelper.instance;
 
-      print("== PREFS ==> $items");
+      /// Get all data from database
+      /// This data was stored from background handler
+      var items = await db.getAllData();
 
-      //if (items != null) {
       for (var message in items) {
-        var decrypted = CryptoSimple.decrypt(encrypted: message);
-        var body = jsonDecode(decrypted);
-
-        print("======== BODY =======");
-        print("MAP ===> $body");
-        print("DECRYPTED ===> $decrypted");
-
-        int productId = body['pid'];
-        int newQty = int.parse(body['value'].toString());
-        String action = body['type'];
-        String name = body['name'];
+        int productId = message.pid!;
+        int newQty = message.value!;
+        String action = message.type!;
+        String name = message.name!;
 
         var type = action == "increment"
             ? ProductAction.INCREMENT
@@ -99,11 +59,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         Product product = Product(productId, newQty, name);
 
         streamController.add(ProductEvent(products, type, product));
-      }
 
-      // widget.prefs.setStringList('items', []);
-      //storage.write('items', []);
-      //}
+        ///
+        /// Delete the data from database
+        /// after adding it to the stream
+        ///
+        await db.deleteData(productId);
+      }
     }
   }
 
@@ -115,19 +77,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   @override
   void initState() {
-    print("=== INIT STATE ===");
     addDummyProduct();
     listenIncoming();
     super.initState();
-    // SharedPreferences.getInstance().then((value) {
-    //   widget.prefs = value;
-    // });
+
     WidgetsBinding.instance.addObserver(this);
-    _initStorage();
   }
 
   void addDummyProduct() async {
-    // prefs = await SharedPreferences.getInstance();
     await Future.delayed(const Duration(seconds: 2));
     var product1 = Product(1, 10, "Apple");
     var product2 = Product(2, 7, "Banana");
@@ -197,7 +154,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    print(GetStorage('PREFS').read('items'));
     var size = MediaQuery.of(context).size;
 
     return Scaffold(
@@ -229,10 +185,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 child: StreamBuilder<ProductEvent>(
                   stream: streamController.stream,
                   builder: (context, snapshot) {
-                    print("=== snapshot builder ===");
-
-                    print(snapshot.data?.products.length);
-
                     if (!snapshot.hasData) {
                       return SizedBox(
                         width: size.width,
@@ -251,8 +203,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       products = snapshot.data!.products;
                       var productSnapshot = snapshot.data!.product;
 
-                      print(snapshot.data!.action.name);
-                      print(productSnapshot.name);
                       var tIndex = products
                           .indexWhere((p) => p.id == productSnapshot.id);
 
@@ -375,12 +325,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       required ProductAction type,
       int value = 1,
       String productName = ""}) async {
-    String _type = "";
+    String actionType = "";
 
     // get the target product
     //var theProduct = streamController
-
-    var tIndex = products.indexWhere((p) => p.id == pid);
 
     Product product = Product(pid, value, productName);
 
@@ -389,7 +337,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     streamController.add(ProductEvent(products, type, product));
 
-    _type = type == ProductAction.INCREMENT
+    actionType = type == ProductAction.INCREMENT
         ? "increment"
         : type == ProductAction.DECREMENT
             ? "decrement"
@@ -397,36 +345,48 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     // need to get the other terminal address
 
-    var recipients = users
+    var recipients = widget.users
         .where((element) => element.mobile != widget.user.mobile)
         .toList()
         .map((e) => e.mobile)
         .toList();
 
-    //for (var mobile in recipients) {
-    String address = "+639171130690";
+    if (kDebugMode) {
+      print("== sending to the following: ==");
+      print(recipients);
+    }
 
-    Map<String, dynamic> content = {
-      "type": _type,
-      "value": value,
-      "pid": pid,
-      "name": productName,
-    };
+    for (var mobile in recipients) {
+      String address = mobile;
 
-    final String sha1Hash =
-        CryptoSimple.encrypt(inputString: jsonEncode(content));
+      Map<String, dynamic> content = {
+        "type": actionType,
+        "value": value,
+        "pid": pid,
+        "name": productName,
+        "date": DateTime.now().toIso8601String(),
+      };
 
-    telephony.sendSms(to: address, message: sha1Hash);
-    //}
+      final String sha1Hash = CryptoSimple.encrypt(
+          inputString: "POC-SMS-APP=${jsonEncode(content)}");
+
+      telephony.sendSms(to: address, message: sha1Hash);
+    }
   }
 
   listenIncoming() async {
     telephony.listenIncomingSms(
-        onNewMessage: (SmsMessage message) {
-          // Handle message
-          try {
+      onNewMessage: (SmsMessage message) {
+        // Handle Incoming message
+        try {
+          if (kDebugMode) {
             print("==== MESSAGE RECEIVED ! ====");
-            var decrypted = CryptoSimple.decrypt(encrypted: message.body!);
+          }
+
+          var decrypted = CryptoSimple.decrypt(encrypted: message.body!);
+
+          if (decrypted.contains("POC-SMS-APP=")) {
+            decrypted = decrypted.replaceFirst("POC-SMS-APP=", "");
 
             var body = jsonDecode(decrypted);
 
@@ -434,9 +394,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             int newQty = int.parse(body['value'].toString());
             String action = body['type'];
             String name = body['name'];
-
-            print(action);
-            print(body);
 
             var type = action == "increment"
                 ? ProductAction.INCREMENT
@@ -447,11 +404,27 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             Product product = Product(productId, newQty, name);
 
             streamController.add(ProductEvent(products, type, product));
-          } catch (e) {
+          }
+        } catch (e) {
+          if (kDebugMode) {
             print("=== errror ===");
             print(e);
           }
-        },
-        onBackgroundMessage: backgrounMessageHandler);
+
+          var dialog = AlertDialog(
+            title: const Text("SMS Received Error"),
+            content: Text(
+              e.toString(),
+            ),
+          );
+
+          showDialog(
+            context: context,
+            builder: (context) => dialog,
+          );
+        }
+      },
+      onBackgroundMessage: backgrounMessageHandler,
+    );
   }
 }

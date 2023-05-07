@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.realtime_poc">
+    package="com.realtime_poc">
 
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.SEND_SMS" />
@@ -8,7 +8,7 @@
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.READ_PROFILE" />
     <application
-        android:label="realtime_poc"
+        android:label="Sync - POC"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 

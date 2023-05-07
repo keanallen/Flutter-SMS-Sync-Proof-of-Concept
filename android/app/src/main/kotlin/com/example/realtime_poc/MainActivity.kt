@@ -1,4 +1,4 @@
-package com.example.realtime_poc
+package com.realtime_poc
 
 import io.flutter.embedding.android.FlutterActivity
 

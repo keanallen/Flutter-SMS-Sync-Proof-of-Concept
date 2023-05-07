@@ -1,16 +1,24 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'package:flutter/material.dart';
-import 'package:realtime_poc/home_page.dart';
-import 'package:realtime_poc/user.dart';
+import 'package:realtime_poc/main.dart';
+import 'package:realtime_poc/recipients_page.dart';
 
-class IntroPage extends StatelessWidget {
-  IntroPage({super.key});
+import 'data/database.dart';
+import 'data/user_model.dart';
 
-  final List<User> users = [
-    //User(1, "Mark Loreto", "+639173242410"),
-    //User(2, "Andrew Ayson", "+639617837182"),
-    User(1, "Dummy", "+639952215588"),
-    User(3, "Kean Allen", "+639952215588"),
-  ];
+class IntroPage extends StatefulWidget {
+  const IntroPage({super.key});
+
+  @override
+  State<IntroPage> createState() => _IntroPageState();
+}
+
+class _IntroPageState extends State<IntroPage> {
+  TextEditingController mobileField = TextEditingController();
+  TextEditingController nameFiled = TextEditingController();
+
+  final db = DatabaseHelper.instance;
 
   @override
   Widget build(BuildContext context) {
@@ -30,46 +38,89 @@ class IntroPage extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            Icon(
+              Icons.point_of_sale_outlined,
+              color: Colors.blue[900],
+              size: 40,
+            ),
             Text(
-              "Please select a user",
+              "Welcome to MyPOS",
               style: Theme.of(context).textTheme.titleSmall!.copyWith(
                     color: Colors.white,
                   ),
             ),
-            const SizedBox(height: 10),
-            Column(
-              children: List.generate(
-                users.length,
-                (index) => Container(
-                  width: 200,
-                  margin: const EdgeInsets.only(bottom: 10),
-                  child: ElevatedButton(
-                    style: buttonStyle,
-                    onPressed: () {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => HomePage(
-                            user: users[index],
-                          ),
-                        ),
-                      );
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.person),
-                          const SizedBox(width: 10),
-                          Text(users[index].name),
-                        ],
+            const SizedBox(height: 50),
+            SizedBox(
+              width: size.width * 0.8,
+              child: Column(
+                children: [
+                  TextField(
+                    textAlign: TextAlign.center,
+                    controller: mobileField,
+                    decoration: InputDecoration(
+                      hintText: 'Mobile Number',
+                      filled: true,
+                      border: InputBorder.none,
+                      fillColor: Colors.blue[600],
+                    ),
+                    keyboardType: TextInputType.phone,
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    textAlign: TextAlign.center,
+                    controller: nameFiled,
+                    decoration: InputDecoration(
+                      hintText: 'Name',
+                      filled: true,
+                      border: InputBorder.none,
+                      fillColor: Colors.blue[600],
+                    ),
+                    keyboardType: TextInputType.name,
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: size.width,
+                    child: ElevatedButton(
+                      style: buttonStyle,
+                      onPressed: nameFiled.text.isNotEmpty &&
+                              mobileField.text.isNotEmpty
+                          ? () async {
+                              if (mobileField.text.trim().isEmpty ||
+                                  mobileField.text.trim().length <= 4) return;
+
+                              showDialog(
+                                context: context,
+                                builder: (context) => const Center(
+                                    child: CircularProgressIndicator()),
+                              );
+                              await Future.delayed(const Duration(seconds: 1));
+                              Navigator.of(context).pop();
+
+                              final user = User(
+                                  mobile: mobileField.text,
+                                  name: nameFiled.text,
+                                  own: 1);
+
+                              await db.insertUser(user);
+
+                              Navigator.pushAndRemoveUntil(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const RecipientsPage(),
+                                  ),
+                                  (route) => false);
+                            }
+                          : null,
+                      child: const Padding(
+                        padding: EdgeInsets.all(12.0),
+                        child: Text("Continue"),
                       ),
                     ),
-                  ),
-                ),
+                  )
+                ],
               ),
-            )
+            ),
           ],
         ),
       ),

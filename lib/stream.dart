@@ -1,6 +1,8 @@
+// ignore_for_file: constant_identifier_names
+
 import 'dart:async';
 
-import 'package:realtime_poc/product.dart';
+import 'package:realtime_poc/data/product.dart';
 
 class ProductService {
   List<Product> products = [];
